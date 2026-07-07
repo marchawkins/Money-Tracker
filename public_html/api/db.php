@@ -1,9 +1,9 @@
 <?php
 // config/ lives two levels up from public_html/api/ on local dev (MAMP)
-// and four levels up on Hostinger shared hosting.
+// and four levels up (in money/ subfolder) on Hostinger shared hosting.
 $candidates = [
     __DIR__ . '/../../config/db.php',
-    __DIR__ . '/../../../../config/db.php',
+    __DIR__ . '/../../../../config/money/db.php',
 ];
 
 $config_path = null;
