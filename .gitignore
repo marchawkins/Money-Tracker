@@ -1,0 +1,9 @@
+# Dev/planning files — not for deployment
+_dev/
+
+# Database credentials — never commit these
+config/db.php
+
+# OS junk
+.DS_Store
+Thumbs.db
