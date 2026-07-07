@@ -1,5 +1,9 @@
 # Dev/planning files — not for deployment
 _dev/
+CLAUDE.md
+
+# Claude Code local state
+.claude/
 
 # Database credentials — never commit these
 config/db.php
