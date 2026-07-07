@@ -14,8 +14,7 @@ The app supports multiple user accounts — each user has fully separate, scoped
 - **Merchant memory** — the app remembers which category a merchant belongs to and auto-fills it next time, including on CSV import
 - **CSV import** — imports bank exports from Apple Card, Chase, and PNC (both checking and savings). Detects duplicates automatically before confirming
 - **Budgeting** — set monthly budgets per category; changes apply going forward only and don't affect historical data
-- **Insights** — search your spending with natural language ("groceries in May", "Wawa", "restaurants last month"). Filter by date preset or custom range. Results show a prominent summary total with a collapsible transaction list
-- **Monthly chart** — a full-year bar chart with clickable months to drill into category breakdowns
+- **Insights** — search your spending with natural language ("groceries in May", "Wawa", "restaurants last month"). Filter by date preset or custom range. Results show a prominent summary total with a collapsible transaction list. Includes a full-year bar chart with clickable months to drill into category breakdowns
 - **Year-end summary** — income vs. expenses across all 12 months with category totals
 
 ## Technical Notes
@@ -45,7 +44,8 @@ public_html/
     accounts.php, import.php, profile.php
     db.php, helpers.php
 config/
-  db.php              ← database credentials (outside web root)
+  db.sample.php       ← credential template (committed)
+  db.php              ← real credentials (gitignored, never committed)
 db/
   schema.sql          ← full schema, importable fresh
 ```
@@ -58,13 +58,29 @@ db/
 
 - **Configure the database connection** — copy `config/db.sample.php` to `config/db.php` and fill in your database host, name, username, password, and app URL. `config/db.php` is gitignored and will never be committed.
 
-- **Point your web root to `public_html/`** — the `config/` and `db/` directories sit outside the web root and are never served over HTTP.
+- **Point your web root to `public_html/`** — the `config/` and `db/` directories sit outside the web root and are never served over HTTP. On Hostinger shared hosting, place `config/db.php` outside the `domains/` web root entirely (e.g. `domains/config/money/db.php`) — the app will find it automatically.
 
 - **Register your account** — visit the app, register with your email, and verify your address. Default spending categories are seeded automatically on first registration.
 
 - **Add your accounts** — go to Profile & Settings to add your bank accounts (e.g. Apple Card, Chase, PNC Checking) before importing or logging transactions.
 
 - **Configure PHP mail (if needed)** — on some shared hosts, email delivery requires configuring SMTP. Check your host's documentation for the recommended approach.
+
+## Deployment
+
+The repo includes a GitHub Actions workflow (`.github/workflows/deploy.yml`) that deploys automatically on every push to `main` via rsync over SSH.
+
+Four secrets are required in the GitHub repo settings:
+
+| Secret | Value |
+|---|---|
+| `SSH_HOST` | Your server IP |
+| `SSH_PORT` | SSH port (commonly `65002` on Hostinger shared hosting) |
+| `SSH_USER` | Your hosting username |
+| `SSH_PRIVATE_KEY` | Contents of your private key file (e.g. `~/.ssh/id_ed25519`) |
+| `DEPLOY_PATH` | Full server path to the deployment directory |
+
+The public key must be added to your host's authorized SSH keys before the action will connect. Only `public_html/` is deployed — config and credentials are never touched by the action.
 
 ## CSV Import
 

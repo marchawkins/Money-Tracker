@@ -27,4 +27,4 @@ jobs:
             --exclude='.DS_Store' \
             -e "ssh -i ~/.ssh/deploy_key -p ${{ secrets.SSH_PORT }}" \
             ./public_html/ \
-            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/home/u667712297/domains/marchawkins.com/public_html/money/
+            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:${{ secrets.DEPLOY_PATH }}
