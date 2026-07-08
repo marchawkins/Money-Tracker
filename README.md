@@ -6,6 +6,13 @@ A personal household finance tracker for budgeting and spending awareness. Built
 
 Money lets you track spending across multiple accounts, assign transactions to categories, set monthly budgets, and import bank statements from CSV. An Insights view lets you search and filter your spending by category, merchant, or date range. A year-end summary compares income and expenses month by month across the full year.
 
+<p align="center" valign="top">
+  <img src="./public_html/readme_assets/dashboard.png" width="22%" alt="Dashboard">
+  <img src="./public_html/readme_assets/add-transaction.png" width="22%" alt="Add transaction">
+  <img src="./public_html/readme_assets/insights.png" width="22%" alt="Insights">
+  <img src="./public_html/readme_assets/import.png" width="22%" alt="Import">
+</p>
+
 The app supports multiple user accounts — each user has fully separate, scoped data. Authentication uses bcrypt password hashing with email verification and password reset flows.
 
 ## Features
