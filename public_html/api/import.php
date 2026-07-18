@@ -41,8 +41,8 @@ function handlePreview(PDO $db): void {
     $chk->execute([$accountId, $uid]);
     if (!$chk->fetch()) json_error('Invalid account');
 
-    // Load merchant→category lookup once
-    $merchantMap = load_merchant_map($db, $uid);
+    // Load merchant→category lookup once (returns ['exact'=>..., 'patterns'=>...])
+    $map = load_merchant_map($db, $uid);
 
     // Load categories by name for CSV category matching
     $categoryByName = load_categories_by_name($db, $uid);
@@ -85,12 +85,12 @@ function handlePreview(PDO $db): void {
             continue;
         }
         // Build associative map: lowercase header → value
-        $map = [];
+        $colMap = [];
         foreach ($rawHeaders as $i => $h) {
-            $map[strtolower(trim($h))] = trim($cols[$i] ?? '');
+            $colMap[strtolower(trim($h))] = trim($cols[$i] ?? '');
         }
 
-        $normalized = normalize_row($map, $format);
+        $normalized = normalize_row($colMap, $format);
         if (!$normalized) { $idx++; continue; }
 
         ['date' => $date, 'merchant' => $merchant, 'amount' => $amount, 'suggested_type' => $suggestedType, 'csv_category' => $csvCategory] = $normalized + ['csv_category' => null];
@@ -103,37 +103,66 @@ function handlePreview(PDO $db): void {
             $suggestedType = 'income';
         }
 
-        // Merchant memory lookup — exact match first, then fuzzy substring fallback
-        $merchantNorm          = strtolower(trim(preg_replace('/\s+/', ' ', $merchant)));
-        $suggestedCategoryId   = $merchantMap[$merchantNorm]['category_id']   ?? null;
-        $suggestedCategoryName = $merchantMap[$merchantNorm]['category_name'] ?? null;
+        // Clean the merchant name (strip bank-feed noise)
+        $merchantClean     = clean_merchant($merchant);
+        $merchantCleanNorm = strtolower(trim(preg_replace('/\s+/', ' ', $merchantClean)));
 
+        // ── Categorization: three-pass lookup ──────────────────────────────
+
+        $suggestedCategoryId   = null;
+        $suggestedCategoryName = null;
+
+        // Pass 1: exact match on cleaned, normalized merchant
+        if (isset($map['exact'][$merchantCleanNorm])) {
+            $suggestedCategoryId   = $map['exact'][$merchantCleanNorm]['category_id'];
+            $suggestedCategoryName = $map['exact'][$merchantCleanNorm]['category_name'];
+        }
+
+        // Pass 2: prefix / regex pattern rules
+        if ($suggestedCategoryId === null) {
+            foreach ($map['patterns'] as $rule) {
+                $hit = false;
+                if ($rule['type'] === 'prefix') {
+                    $hit = str_starts_with($merchantCleanNorm, $rule['pattern']);
+                } elseif ($rule['type'] === 'regex') {
+                    // Suppress error on malformed pattern; treat as no-match
+                    $hit = @preg_match('/' . $rule['pattern'] . '/i', $merchantCleanNorm) === 1;
+                }
+                if ($hit) {
+                    $suggestedCategoryId   = $rule['category_id'];
+                    $suggestedCategoryName = $rule['category_name'];
+                    break;
+                }
+            }
+        }
+
+        // Pass 3: fuzzy substring / shared-prefix fallback (exact map only)
         if ($suggestedCategoryId === null) {
             $bestLen   = 0;
             $bestMatch = null;
-            foreach ($merchantMap as $stored => $cat) {
+            foreach ($map['exact'] as $stored => $cat) {
                 $storedLen  = strlen($stored);
-                $currentLen = strlen($merchantNorm);
+                $currentLen = strlen($merchantCleanNorm);
                 if ($storedLen < 5) continue;
 
-                // 1. Stored name is a substring of the current merchant
-                if (str_contains($merchantNorm, $stored) && $storedLen > $bestLen) {
+                // 3a. Stored name is a substring of the current merchant
+                if (str_contains($merchantCleanNorm, $stored) && $storedLen > $bestLen) {
                     $bestLen   = $storedLen;
                     $bestMatch = $cat;
                     continue;
                 }
 
-                // 2. Current merchant is a substring of the stored name
-                if ($currentLen >= 5 && str_contains($stored, $merchantNorm) && $currentLen > $bestLen) {
+                // 3b. Current merchant is a substring of the stored name
+                if ($currentLen >= 5 && str_contains($stored, $merchantCleanNorm) && $currentLen > $bestLen) {
                     $bestLen   = $currentLen;
                     $bestMatch = $cat;
                     continue;
                 }
 
-                // 3. Shared prefix of at least 10 chars (catches "STARBUCKS #1234" vs "STARBUCKS #5678")
+                // 3c. Shared prefix of at least 10 chars (catches "STARBUCKS #1234" vs "STARBUCKS #5678")
                 $prefixLen = 10;
                 if ($storedLen >= $prefixLen && $currentLen >= $prefixLen &&
-                    substr($stored, 0, $prefixLen) === substr($merchantNorm, 0, $prefixLen) &&
+                    substr($stored, 0, $prefixLen) === substr($merchantCleanNorm, 0, $prefixLen) &&
                     $prefixLen > $bestLen) {
                     $bestLen   = $prefixLen;
                     $bestMatch = $cat;
@@ -145,7 +174,7 @@ function handlePreview(PDO $db): void {
             }
         }
 
-        // Fall back to CSV category column if merchant memory has no match
+        // Pass 4: fall back to CSV category column
         if ($suggestedCategoryId === null && $csvCategory !== null) {
             $csvCatNorm = strtolower(trim($csvCategory));
             if (isset($categoryByName[$csvCatNorm])) {
@@ -154,8 +183,9 @@ function handlePreview(PDO $db): void {
             }
         }
 
-        // Duplicate detection
-        $dupKey      = $date . '|' . number_format($amount, 2) . '|' . $merchantNorm;
+        // Duplicate detection — keyed on cleaned merchant so "same merchant,
+        // different card-number suffix" doesn't slip through as two separate rows
+        $dupKey      = $date . '|' . number_format($amount, 2) . '|' . $merchantCleanNorm;
         $isDuplicate = isset($existingSet[$dupKey]);
 
         $rawStr = implode(',', array_map(fn($v) => '"' . str_replace('"', '""', $v) . '"', $cols));
@@ -164,6 +194,7 @@ function handlePreview(PDO $db): void {
             'row_index'               => $idx,
             'date'                    => $date,
             'merchant'                => $merchant,
+            'merchant_clean'          => $merchantClean,
             'amount'                  => $amount,
             'suggested_type'          => $suggestedType,
             'suggested_category_id'   => $suggestedCategoryId,
@@ -225,12 +256,14 @@ function handleConfirm(PDO $db): void {
     }
 
     $insertStmt = $db->prepare('
-        INSERT INTO transactions (user_id, account_id, category_id, merchant, amount, type, date, source)
-        VALUES (?, ?, ?, ?, ?, ?, ?, "import")
+        INSERT INTO transactions (user_id, account_id, category_id, merchant, merchant_clean, amount, type, date, source)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, "import")
     ');
+    // Upsert key is the *cleaned* normalized merchant so the exact-match table
+    // stays clean and future imports match correctly
     $merchantUpsert = $db->prepare('
-        INSERT INTO merchant_categories (user_id, merchant_normalized, category_id)
-        VALUES (?, ?, ?)
+        INSERT INTO merchant_categories (user_id, merchant_normalized, match_type, match_pattern, category_id)
+        VALUES (?, ?, "exact", NULL, ?)
         ON DUPLICATE KEY UPDATE category_id = VALUES(category_id), updated_at = NOW()
     ');
 
@@ -251,12 +284,19 @@ function handleConfirm(PDO $db): void {
             if ($amount <= 0)                                                { $errors++; continue; }
             if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date))               { $errors++; continue; }
 
-            $insertStmt->execute([$uid, $accountId, $categoryId, $merchant, $amount, $type, $date]);
+            // Always recompute merchant_clean server-side (don't trust the
+            // client payload, and the preview value may have been user-edited).
+            // Store NULL rather than empty string when merchant is blank —
+            // the column is nullable (no DEFAULT) in the live schema.
+            $merchantClean = ($merchant !== '') ? clean_merchant($merchant) : null;
 
-            if ($merchant && $categoryId) {
-                $norm = strtolower(trim(preg_replace('/\s+/', ' ', $merchant)));
-                if ($norm !== '') {
-                    $merchantUpsert->execute([$uid, $norm, $categoryId]);
+            $insertStmt->execute([$uid, $accountId, $categoryId, $merchant, $merchantClean, $amount, $type, $date]);
+
+            // Upsert exact-match rule using cleaned key (only when user confirmed a category)
+            if ($merchant && $categoryId && $merchantClean !== null) {
+                $cleanNorm = strtolower(trim(preg_replace('/\s+/', ' ', $merchantClean)));
+                if ($cleanNorm !== '') {
+                    $merchantUpsert->execute([$uid, $cleanNorm, $categoryId]);
                 }
             }
 
@@ -298,22 +338,104 @@ function handleLog(PDO $db): void {
 
 /* ── helpers ──────────────────────────────────────────────── */
 
+/**
+ * Strip bank-feed noise from a raw merchant string.
+ *
+ * Ported directly from the Python reference implementation validated against
+ * ~3,700 real transactions (PNC checking/savings, Chase CC, Apple Card).
+ *
+ * Examples:
+ *   "TST* TWO STONES PUB - KENNETT SQU PA DEBIT CARD PURCHASE xxxxxxxxxxxxxxxx0036"
+ *     -> "TST* TWO STONES PUB - KENNETT SQU"
+ *   "GIANT 6516 KENNETT SQUA PA POS PURCHASE POS001 xxx6417"
+ *     -> "GIANT 6516 KENNETT SQUA"
+ *   "GIANT 6516 PURCHASE ACH WEB xxxxxxxxxxx6637"
+ *     -> "GIANT 6516 PURCHASE"   <-- "PURCHASE" stays; only "ACH WEB x+digits" stripped
+ *   "WAWA 25 WEST CHESTER PA POS PURCHASE POSxxxx6705 xxx2931"
+ *     -> "WAWA 25 WEST CHESTER"
+ *
+ * Known limitation: merchants with a unique reference number embedded mid-string
+ * (AMZ*9kzwordq7, ONEQUINCE* Q20275053, BMW BANK BMWFS PYMT ACH DEBIT xxx0650)
+ * pass through unchanged. Use prefix/regex rules in merchant_categories for those.
+ */
+function clean_merchant(string $raw): string {
+    if (trim($raw) === '') return $raw;
+
+    $m = $raw;
+
+    // Rule 1: Strip "DEBIT CARD PURCHASE xxxxxxxxxxxxxxxx0036" and
+    //         "POS PURCHASE POSxxxx6705 xxx2931" / "POS PURCHASE POS001 xxx6417"
+    //         Requires a masked card number (xxx+digits) to be present — avoids
+    //         over-stripping merchants that legitimately contain these words.
+    $m = preg_replace(
+        '/\s+(DEBIT CARD PURCHASE|POS PURCHASE)\s*(POS[x0-9]+\s*)?xxx+\d+.*$/i',
+        '',
+        $m
+    );
+
+    // Rule 2: Strip "ACH WEB xxxxxxxxxxx6637" style suffixes.
+    //         Note: only the "ACH WEB x+digits" portion is stripped, so a merchant
+    //         like "GIANT 6516 PURCHASE ACH WEB xxx6637" becomes "GIANT 6516 PURCHASE".
+    $m = preg_replace('/\s+ACH WEB\s+x+\d+\s*$/i', '', $m);
+
+    // Rule 3: Strip a dangling trailing state abbreviation left over after the above.
+    //         Hardcoded to PA/DE/NJ (local states in the source data) rather than
+    //         any two-letter sequence, to avoid false positives like "COCA CA" -> "COCA".
+    $m = preg_replace('/\s+(PA|DE|NJ)$/', '', $m);
+
+    return trim($m);
+}
+
+/**
+ * Load the merchant→category map, split into exact-match entries and
+ * pattern rules (prefix / regex).
+ *
+ * Returns:
+ *   [
+ *     'exact'    => [ 'merchant_norm' => ['category_id'=>int, 'category_name'=>str], ... ],
+ *     'patterns' => [ ['type'=>str, 'pattern'=>str, 'category_id'=>int, 'category_name'=>str], ... ]
+ *   ]
+ *
+ * Pattern rules are sorted prefix-first (faster to evaluate), then regex.
+ * Within each type they're ordered by most-recently-updated first, giving
+ * recently-added rules a higher priority than older ones.
+ */
 function load_merchant_map(PDO $db, int $uid): array {
     $stmt = $db->prepare('
-        SELECT mc.merchant_normalized, mc.category_id, c.name AS category_name
+        SELECT mc.merchant_normalized, mc.match_type, mc.match_pattern,
+               mc.category_id, c.name AS category_name
         FROM merchant_categories mc
         JOIN categories c ON c.id = mc.category_id
         WHERE mc.user_id = ?
+        ORDER BY mc.updated_at DESC
     ');
     $stmt->execute([$uid]);
-    $map = [];
+
+    $exact    = [];
+    $patterns = [];
+
     foreach ($stmt->fetchAll() as $r) {
-        $map[$r['merchant_normalized']] = [
+        $cat = [
             'category_id'   => (int)$r['category_id'],
             'category_name' => $r['category_name'],
         ];
+        if ($r['match_type'] === 'exact') {
+            $exact[$r['merchant_normalized']] = $cat;
+        } else {
+            $patterns[] = array_merge($cat, [
+                'type'    => $r['match_type'],
+                // Patterns are stored lowercase; normalise here for safety
+                'pattern' => strtolower(trim($r['match_pattern'] ?? '')),
+            ]);
+        }
     }
-    return $map;
+
+    // Prefix rules first (cheap string op), then regex (more expensive)
+    usort($patterns, fn($a, $b) =>
+        ($a['type'] === 'prefix' ? 0 : 1) <=> ($b['type'] === 'prefix' ? 0 : 1)
+    );
+
+    return ['exact' => $exact, 'patterns' => $patterns];
 }
 
 function load_categories_by_name(PDO $db, int $uid): array {
@@ -326,17 +448,35 @@ function load_categories_by_name(PDO $db, int $uid): array {
     return $map;
 }
 
+/**
+ * Build the set of existing transactions for duplicate detection.
+ *
+ * The key is built from the cleaned merchant so that two raw strings that clean
+ * to the same merchant (e.g. same Giant store, different POS terminal ID) are
+ * correctly identified as duplicates.
+ *
+ * During the transition period before the merchant_clean backfill is run,
+ * rows with an empty merchant_clean fall back to running clean_merchant() on
+ * the raw merchant column, so duplicate detection is accurate either way.
+ */
 function load_existing_set(PDO $db, int $uid, int $accountId): array {
     $stmt = $db->prepare('
-        SELECT date, amount, LOWER(TRIM(merchant)) AS merchant_norm
+        SELECT date, amount, merchant, merchant_clean
         FROM transactions
         WHERE user_id = ? AND account_id = ? AND deleted_at IS NULL
     ');
     $stmt->execute([$uid, $accountId]);
     $set = [];
     foreach ($stmt->fetchAll() as $r) {
-        $key        = $r['date'] . '|' . number_format((float)$r['amount'], 2) . '|' . $r['merchant_norm'];
-        $set[$key]  = true;
+        // Use merchant_clean if populated (column is nullable); otherwise derive on the fly.
+        // Explicit null check required: null !== '' is true in PHP, so without it we'd
+        // pass null into preg_replace and get a deprecation + wrong key.
+        $cleanSrc = ($r['merchant_clean'] !== null && $r['merchant_clean'] !== '')
+            ? $r['merchant_clean']
+            : clean_merchant($r['merchant']);
+        $norm     = strtolower(trim(preg_replace('/\s+/', ' ', $cleanSrc)));
+        $key      = $r['date'] . '|' . number_format((float)$r['amount'], 2) . '|' . $norm;
+        $set[$key] = true;
     }
     return $set;
 }

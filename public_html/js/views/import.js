@@ -196,7 +196,12 @@ const ImportView = (() => {
                     <input type="checkbox" class="import-include" data-idx="${i}"${state.included ? ' checked' : ''}>
                 </td>
                 <td class="col-date">${escHtml(formatDate(r.date))}</td>
-                <td class="col-merchant import-merchant" title="${escHtml(r.merchant)}">${escHtml(r.merchant)}</td>
+                <td class="col-merchant" title="${escHtml(r.merchant)}">
+                    <span class="import-merchant">${escHtml(r.merchant_clean || r.merchant)}</span>
+                    ${r.merchant_clean && r.merchant_clean !== r.merchant
+                        ? `<span class="merchant-raw">${escHtml(r.merchant)}</span>`
+                        : ''}
+                </td>
                 <td class="col-category">
                     <select class="import-cat filter-select" data-idx="${i}">
                         ${catOptsHTML}

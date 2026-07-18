@@ -1,0 +1,46 @@
+-- Migration 01: merchant_clean column + pattern-based merchant matching
+-- schema.sql reflects the final target state for fresh installs.
+--
+-- ── APPLIED STATUS (as of 2026-07-18) ──────────────────────────────────────
+--
+-- [ALREADY EXISTS — DO NOT RE-RUN]
+--   categories.parent_id     Added manually before this migration.
+--                            Has an index (idx_parent_id) but NO FK constraint —
+--                            MariaDB on this host rejected the FK syntax.
+--
+-- [ALREADY EXISTS — DO NOT RE-RUN]
+--   transactions.merchant_clean  Added and backfilled (~1,118 rows) using a
+--                                validated Python regex before this migration.
+--                                Defined as: VARCHAR(255) NULL (no default).
+--                                Do NOT overwrite with import.php's clean_merchant()
+--                                without first comparing outputs against the existing
+--                                validated data.
+--
+-- [APPLIED CLEAN — already ran]
+--   merchant_categories.match_type    ENUM('exact','prefix','regex') DEFAULT 'exact'
+--   merchant_categories.match_pattern VARCHAR(500) NULL
+--
+-- ── NOTHING LEFT TO RUN ─────────────────────────────────────────────────────
+--
+-- Keeping the original ALTER TABLE statements below for reference only.
+-- They will ERROR if run again (duplicate column).
+
+-- -- 1. Add parent_id to categories (subcategory support)
+-- ALTER TABLE categories
+--     ADD COLUMN parent_id INT UNSIGNED NULL AFTER user_id,
+--     ADD INDEX idx_parent_id (parent_id);
+-- -- FK constraint not viable on this host's MariaDB version; index only.
+
+-- -- 2. Add merchant_clean to transactions
+-- ALTER TABLE transactions
+--     ADD COLUMN merchant_clean VARCHAR(255) NULL
+--         COMMENT 'Bank-feed noise stripped; used for matching and display'
+--         AFTER merchant;
+
+-- -- 3. Add match_type and match_pattern to merchant_categories
+-- ALTER TABLE merchant_categories
+--     ADD COLUMN match_type ENUM('exact','prefix','regex') NOT NULL DEFAULT 'exact'
+--         AFTER merchant_normalized,
+--     ADD COLUMN match_pattern VARCHAR(500) NULL
+--         COMMENT 'For prefix/regex rules; NULL = use merchant_normalized as exact key'
+--         AFTER match_type;

@@ -34,25 +34,31 @@ CREATE TABLE accounts (
 CREATE TABLE categories (
     id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     user_id    INT UNSIGNED NOT NULL,
+    parent_id  INT UNSIGNED NULL,
     name       VARCHAR(100) NOT NULL,
     deleted_at TIMESTAMP NULL DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    -- NOTE: parent_id has an index on the live DB but no FK constraint.
+    -- MariaDB on this host rejected the FK syntax; only the index stuck.
+    -- Application code must not assume referential integrity is enforced.
+    INDEX idx_parent_id (parent_id)
 );
 
 CREATE TABLE transactions (
-    id          INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    user_id     INT UNSIGNED NOT NULL,
-    account_id  INT UNSIGNED NULL,
-    category_id INT UNSIGNED NULL,
-    merchant    VARCHAR(255) NOT NULL DEFAULT '',
-    amount      DECIMAL(10,2) NOT NULL,
-    type        ENUM('expense','income','transfer') NOT NULL DEFAULT 'expense',
-    date        DATE NOT NULL,
-    notes       TEXT NULL,
-    source      ENUM('manual','import') NOT NULL DEFAULT 'manual',
-    deleted_at  TIMESTAMP NULL DEFAULT NULL,
-    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    id             INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    user_id        INT UNSIGNED NOT NULL,
+    account_id     INT UNSIGNED NULL,
+    category_id    INT UNSIGNED NULL,
+    merchant       VARCHAR(255) NOT NULL DEFAULT '',
+    merchant_clean VARCHAR(255) NULL COMMENT 'Bank-feed noise stripped; used for matching and display. NULL when not yet normalised.',
+    amount         DECIMAL(10,2) NOT NULL,
+    type           ENUM('expense','income','transfer') NOT NULL DEFAULT 'expense',
+    date           DATE NOT NULL,
+    notes          TEXT NULL,
+    source         ENUM('manual','import') NOT NULL DEFAULT 'manual',
+    deleted_at     TIMESTAMP NULL DEFAULT NULL,
+    created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id)     REFERENCES users(id)      ON DELETE CASCADE,
     FOREIGN KEY (account_id)  REFERENCES accounts(id)   ON DELETE SET NULL,
     FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE SET NULL,
@@ -89,7 +95,9 @@ CREATE TABLE budgets (
 CREATE TABLE merchant_categories (
     id                  INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     user_id             INT UNSIGNED NOT NULL,
-    merchant_normalized VARCHAR(255) NOT NULL,
+    merchant_normalized VARCHAR(255) NOT NULL COMMENT 'Normalized merchant string (exact) or human-readable label (prefix/regex)',
+    match_type          ENUM('exact','prefix','regex') NOT NULL DEFAULT 'exact',
+    match_pattern       VARCHAR(500) NULL COMMENT 'For prefix/regex rules; NULL means use merchant_normalized as the exact key',
     category_id         INT UNSIGNED NOT NULL,
     updated_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id)     REFERENCES users(id)      ON DELETE CASCADE,

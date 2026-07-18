@@ -999,6 +999,16 @@ textarea { font-size: 1rem; resize: vertical; }
     color: var(--ink);
     font-weight: 500;
 }
+.merchant-raw {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.7rem;
+    font-weight: 400;
+    color: var(--color-muted);
+    margin-top: 2px;
+}
 
 /* Inline selects inside the table */
 .import-table .filter-select {
