@@ -13,12 +13,15 @@ const DashboardView = (() => {
     }
 
     async function render(container, signal) {
-        const now = new Date();
-        let year  = now.getFullYear();
-        let month = now.getMonth() + 1;
+        const now    = new Date();
+        const qs     = window.location.hash.split('?')[1] || '';
+        const qsMonth = new URLSearchParams(qs).get('month');
+        let year  = qsMonth ? parseInt(qsMonth.slice(0, 4), 10) : now.getFullYear();
+        let month = qsMonth ? parseInt(qsMonth.slice(5, 7), 10) : now.getMonth() + 1;
 
         async function load() {
             const mStr = `${year}-${String(month).padStart(2, '0')}`;
+            history.replaceState(null, '', '#dashboard?month=' + mStr);
             container.innerHTML = `<p class="loading">Loading…</p>`;
             try {
                 const data = await API.dashboard.get('month=' + mStr, signal);
@@ -52,29 +55,53 @@ const DashboardView = (() => {
             }
 
             // Budget progress items
-            let budgetHTML = '';
-            if (budget_progress && budget_progress.length) {
-                budgetHTML = budget_progress.map(b => {
+            function buildBudgetItems(items) {
+                return items.map(b => {
                     const pct      = b.budget_amount > 0
                         ? Math.min((b.spent / b.budget_amount) * 100, 100)
                         : 0;
                     const overCls  = b.over_budget ? ' over' : '';
-                    return `<div class="budget-item">
+                    const pctOfBudget = b.budget_amount > 0
+                        ? Math.round((b.spent / b.budget_amount) * 100)
+                        : 0;
+                    const pctLabel = b.spent > 0
+                        ? ` <span class="budget-cat-pct${pctOfBudget > 100 ? ' over' : ''}">(${pctOfBudget > 0 ? pctOfBudget + '%' : '<1%'})</span>`
+                        : '';
+                    const catLabel = (b.parent_category_name
+                        ? `${escHtml(b.parent_category_name)}: ${escHtml(b.category_name)}`
+                        : escHtml(b.category_name)) + pctLabel;
+                    return `<div class="budget-item" data-cat-id="${b.category_id}">
                         <div class="budget-item-header">
-                            <span class="budget-cat${overCls}">${escHtml(b.category_name)}</span>
-                            <span class="budget-amounts${overCls}">${escHtml(formatCurrency(b.spent))} of ${escHtml(formatCurrency(b.budget_amount))}</span>
+                            <span class="budget-cat${overCls}">${catLabel}</span>
+                            <div class="budget-item-right">
+                                <span class="budget-amounts${overCls}">${escHtml(formatCurrency(b.spent))} of ${escHtml(formatCurrency(b.budget_amount))}</span>
+                                <svg class="budget-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+                            </div>
                         </div>
                         <div class="progress-bar-track">
                             <div class="progress-bar-fill${overCls}" style="width:${pct.toFixed(1)}%"></div>
                         </div>
+                        <div class="budget-accordion" hidden></div>
                     </div>`;
                 }).join('');
-                if (unbudgeted_total > 0) {
-                    budgetHTML += `<p class="budget-unbudgeted">+ ${escHtml(formatCurrency(unbudgeted_total))} in unbudgeted categories</p>`;
-                }
-            } else {
-                budgetHTML = `<p class="text-muted budget-empty">No budgets set yet. <a href="#budgets" class="link">Set up budgets →</a></p>`;
             }
+
+            function sortBudgets(items, key) {
+                const copy = [...items];
+                if (key === 'budget') return copy.sort((a, b) => b.budget_amount - a.budget_amount);
+                if (key === 'spent')  return copy.sort((a, b) => b.spent - a.spent);
+                // alpha — sort by display label
+                return copy.sort((a, b) => {
+                    const la = (a.parent_category_name ? a.parent_category_name + ': ' : '') + a.category_name;
+                    const lb = (b.parent_category_name ? b.parent_category_name + ': ' : '') + b.category_name;
+                    return la.localeCompare(lb);
+                });
+            }
+
+            const hasBudgets = budget_progress && budget_progress.length;
+            const unbudgetedFooter = (hasBudgets && unbudgeted_total > 0)
+                ? `<p class="budget-unbudgeted">+ ${escHtml(formatCurrency(unbudgeted_total))} in unbudgeted categories</p>`
+                : '';
 
             // Recent transactions
             let recentHTML = '';
@@ -126,20 +153,19 @@ const DashboardView = (() => {
                             <span class="dash-summary-value expense">−${escHtml(formatCurrency(summary.total_expenses))}</span>
                         </div>
                     </div>
-                    <a href="#add" class="btn btn-primary btn-block dash-add-btn">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
-                        Add Transaction
-                    </a>
                 </div>
 
                 <div class="card dash-budgets">
-                    <h2 class="label-sm">Budget Progress</h2>
-                    ${budgetHTML}
-                </div>
-
-                <div class="card dash-trend">
-                    <h2 class="label-sm">6-Month Spending</h2>
-                    <div id="dash-chart"></div>
+                    <div class="dash-budgets-header">
+                        <h2 class="label-sm">Budget Progress</h2>
+                        ${hasBudgets ? `<select id="budget-sort" class="budget-sort-select">
+                            <option value="alpha">A → Z</option>
+                            <option value="budget">Budget ↓</option>
+                            <option value="spent">Spent ↓</option>
+                        </select>` : ''}
+                    </div>
+                    <div id="budget-items">${hasBudgets ? buildBudgetItems(sortBudgets(budget_progress, 'alpha')) : '<p class="text-muted budget-empty">No budgets set yet. <a href="#budgets" class="link">Set up budgets →</a></p>'}</div>
+                    ${unbudgetedFooter}
                 </div>
 
                 <div class="card dash-recent">
@@ -149,9 +175,88 @@ const DashboardView = (() => {
                 </div>
             `;
 
-            // Draw chart
-            if (trend.length) {
-                SpendingChart.render('dash-chart', trend);
+            // Budget sort
+            const sortSel = container.querySelector('#budget-sort');
+            if (sortSel) {
+                sortSel.addEventListener('change', () => {
+                    container.querySelector('#budget-items').innerHTML =
+                        buildBudgetItems(sortBudgets(budget_progress, sortSel.value));
+                }, { signal });
+            }
+
+            // Budget accordion — lazy-load transactions per category
+            const txnCache = {};
+            const budgetsCard = container.querySelector('.dash-budgets');
+            if (budgetsCard) {
+                budgetsCard.addEventListener('click', async (e) => {
+                    const item = e.target.closest('.budget-item[data-cat-id]');
+                    if (!item) return;
+
+                    const catId     = item.dataset.catId;
+                    const accordion = item.querySelector('.budget-accordion');
+                    const isOpen    = !accordion.hidden;
+
+                    if (isOpen) {
+                        accordion.hidden = true;
+                        item.classList.remove('open');
+                        return;
+                    }
+
+                    item.classList.add('open');
+                    accordion.hidden = false;
+
+                    // Serve from cache on repeat opens
+                    if (txnCache[catId]) {
+                        accordion.innerHTML = txnCache[catId];
+                        wireAccordionRows(accordion);
+                        return;
+                    }
+
+                    accordion.innerHTML = `<p class="budget-acc-msg">Loading…</p>`;
+
+                    const mStr    = `${year}-${String(month).padStart(2, '0')}`;
+                    const lastDay = new Date(year, month, 0).getDate();
+                    const start   = `${mStr}-01`;
+                    const end     = `${mStr}-${String(lastDay).padStart(2, '0')}`;
+
+                    try {
+                        const data = await API.transactions.list(
+                            `category_id=${catId}&start=${start}&end=${end}&limit=100`, signal
+                        );
+                        const txns = data.transactions || [];
+
+                        if (!txns.length) {
+                            txnCache[catId] = `<p class="budget-acc-msg">No transactions this month.</p>`;
+                        } else {
+                            txnCache[catId] = txns.map(t => {
+                                const sign   = t.type === 'income' ? '+' : t.type === 'transfer' ? '' : '−';
+                                const amtCls = t.type === 'income' ? 'income' : t.type === 'transfer' ? 'transfer' : 'expense';
+                                return `<div class="budget-acc-row" data-id="${t.id}">
+                                    <span class="budget-acc-merchant">${escHtml(t.merchant || '—')}</span>
+                                    <span class="budget-acc-right">
+                                        <span class="budget-acc-amount ${amtCls}">${escHtml(sign + formatCurrency(t.amount))}</span>
+                                        <span class="budget-acc-date">${escHtml(formatDate(t.date))}</span>
+                                    </span>
+                                </div>`;
+                            }).join('');
+                        }
+
+                        accordion.innerHTML = txnCache[catId];
+                        wireAccordionRows(accordion);
+                    } catch (err) {
+                        if (err.name === 'AbortError') return;
+                        accordion.innerHTML = `<p class="budget-acc-msg error">Failed to load.</p>`;
+                    }
+                }, { signal });
+            }
+
+            function wireAccordionRows(accordion) {
+                accordion.querySelectorAll('.budget-acc-row[data-id]').forEach(row => {
+                    row.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        window.location.hash = '#add?edit=' + row.dataset.id + '&return=' + encodeURIComponent(window.location.hash);
+                    }, { signal });
+                });
             }
 
             // Recent transaction row → edit

@@ -91,7 +91,8 @@ function build_where(array &$values): string {
         $values[] = $_GET['end'];
     }
     if (!empty($_GET['q'])) {
-        $where[] = 't.merchant LIKE ?';
+        $where[] = '(t.merchant LIKE ? OR t.category_id IN (SELECT id FROM categories WHERE name LIKE ?))';
+        $values[] = '%' . $_GET['q'] . '%';
         $values[] = '%' . $_GET['q'] . '%';
     }
     return implode(' AND ', $where);

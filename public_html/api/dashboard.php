@@ -43,8 +43,8 @@ function handleGet(PDO $db): void {
 
     // Budget progress: latest effective budget per category for this month
     $stmt = $db->prepare("
-        SELECT b.id, b.category_id, c.name AS category_name, b.amount AS budget_amount,
-               COALESCE(SUM(t.amount), 0) AS spent
+        SELECT b.id, b.category_id, c.name AS category_name, p.name AS parent_category_name,
+               b.amount AS budget_amount, COALESCE(SUM(t.amount), 0) AS spent
         FROM budgets b
         INNER JOIN (
             SELECT category_id, MAX(effective_month) AS max_month
@@ -54,14 +54,15 @@ function handleGet(PDO $db): void {
         ) latest ON latest.category_id = b.category_id
                  AND latest.max_month  = b.effective_month
         JOIN categories c ON c.id = b.category_id AND c.deleted_at IS NULL
+        LEFT JOIN categories p ON p.id = c.parent_id AND p.deleted_at IS NULL
         LEFT JOIN transactions t ON t.category_id = b.category_id
             AND t.user_id = ?
             AND t.type = 'expense'
             AND t.date >= ? AND t.date <= ?
             AND t.deleted_at IS NULL
         WHERE b.user_id = ?
-        GROUP BY b.id, b.category_id, c.name, b.amount
-        ORDER BY c.name
+        GROUP BY b.id, b.category_id, c.name, p.name, b.amount
+        ORDER BY COALESCE(p.name, c.name), c.name
     ");
     $stmt->execute([$uid, $monthStart, $uid, $monthStart, $monthEnd, $uid]);
     $budgetRows = $stmt->fetchAll();
@@ -72,9 +73,10 @@ function handleGet(PDO $db): void {
         $spent   = (float)$r['spent'];
         $budget  = (float)$r['budget_amount'];
         $budgetProgress[] = [
-            'category_id'   => (int)$r['category_id'],
-            'category_name' => $r['category_name'],
-            'budget_amount' => $budget,
+            'category_id'          => (int)$r['category_id'],
+            'category_name'        => $r['category_name'],
+            'parent_category_name' => $r['parent_category_name'] ?? null,
+            'budget_amount'        => $budget,
             'spent'         => $spent,
             'remaining'     => $budget - $spent,
             'over_budget'   => $spent > $budget,

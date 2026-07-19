@@ -497,6 +497,26 @@ const InsightsView = (() => {
         const countStr = `${total} transaction${total !== 1 ? 's' : ''}`;
         const moreNote = total > txns.length ? ` <span class="summary-more">(showing ${txns.length})</span>` : '';
 
+        // Category breakdown — shown when a freetext q is active
+        let matchBreakdownHTML = '';
+        if (state.merchantQ && txns.length) {
+            const q = state.merchantQ.toLowerCase();
+            const catCounts  = {};
+            const merchMatch = new Set();
+            txns.forEach(t => {
+                const cat = t.category_name || 'Uncategorized';
+                catCounts[cat] = (catCounts[cat] || 0) + 1;
+                if (t.merchant && t.merchant.toLowerCase().includes(q)) {
+                    merchMatch.add(t.merchant);
+                }
+            });
+            const catTags = Object.entries(catCounts)
+                .sort((a, b) => b[1] - a[1])
+                .map(([name, n]) => `<span class="match-tag">${escHtml(name)}<span class="match-tag-count">${n}</span></span>`)
+                .join('');
+            matchBreakdownHTML = `<div class="match-breakdown">${catTags}</div>`;
+        }
+
         // Collapsible transaction rows
         const rowsHTML = txns.map(t => {
             const sign = t.type === 'income' ? '+' : '−';
@@ -518,6 +538,7 @@ const InsightsView = (() => {
             <div class="insights-summary">
                 <div class="summary-amounts">${amountItems.join('')}</div>
                 <div class="summary-count">${countStr}${moreNote}</div>
+                ${matchBreakdownHTML}
             </div>
             <button class="insights-txn-toggle" type="button" id="txn-toggle">
                 Show transactions <span class="toggle-arrow">▼</span>

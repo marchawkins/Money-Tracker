@@ -827,6 +827,25 @@ textarea { font-size: 1rem; resize: vertical; }
 .dash-add-btn:active { opacity: 0.85; }
 
 /* ── Budget progress section ─────────────────────────────── */
+.dash-budgets-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 4px;
+}
+.dash-budgets-header .label-sm { margin-bottom: 0; white-space: nowrap; }
+.budget-sort-select {
+    font-size: 0.75rem;
+    padding: 3px 6px;
+    width: auto;
+    flex-shrink: 0;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--paper);
+    color: var(--soft);
+    cursor: pointer;
+}
+
 .budget-item {
     padding: 13px 0;
     border-bottom: 1px solid var(--line2);
@@ -836,15 +855,31 @@ textarea { font-size: 1rem; resize: vertical; }
 .budget-item-header {
     display: flex;
     justify-content: space-between;
-    align-items: baseline;
+    align-items: center;
     gap: 8px;
+    cursor: pointer;
+    user-select: none;
 }
+.budget-item-right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+}
+.budget-chevron {
+    color: var(--faint);
+    transition: transform 0.2s ease;
+    flex-shrink: 0;
+}
+.budget-item.open .budget-chevron { transform: rotate(180deg); }
 .budget-cat {
     font-size: 0.9375rem;
     font-weight: 500;
     color: var(--ink);
 }
 .budget-cat.over     { color: var(--color-danger); }
+.budget-cat-pct      { font-weight: 400; color: var(--faint); font-size: 0.8em; }
+.budget-cat-pct.over { color: var(--color-danger); }
 .budget-amounts {
     font-family: var(--mono);
     font-size: 0.75rem;
@@ -863,6 +898,57 @@ textarea { font-size: 1rem; resize: vertical; }
 }
 .budget-empty {
     padding: 12px 0 4px;
+}
+
+/* Budget accordion */
+.budget-accordion {
+    margin-top: 6px;
+    padding-top: 2px;
+    border-top: 1px solid var(--line2);
+}
+.budget-acc-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 0;
+    border-bottom: 1px solid var(--line2);
+    cursor: pointer;
+}
+.budget-acc-row:last-child { border-bottom: none; }
+.budget-acc-row:hover .budget-acc-merchant { color: var(--accent); }
+.budget-acc-merchant {
+    font-size: 0.875rem;
+    color: var(--ink);
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.budget-acc-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 1px;
+    flex-shrink: 0;
+}
+.budget-acc-amount {
+    font-family: var(--mono);
+    font-size: 0.8125rem;
+    font-weight: 500;
+}
+.budget-acc-amount.income   { color: var(--color-success); }
+.budget-acc-amount.expense  { color: var(--color-danger); }
+.budget-acc-amount.transfer { color: var(--faint); }
+.budget-acc-date {
+    font-size: 0.6875rem;
+    color: var(--faint);
+}
+.budget-acc-msg {
+    font-size: 0.8125rem;
+    color: var(--faint);
+    padding: 8px 0;
+    margin: 0;
 }
 
 /* ── 6-Month trend chart ─────────────────────────────────── */
@@ -1501,6 +1587,27 @@ textarea { font-size: 1rem; resize: vertical; }
     color: var(--soft);
 }
 .summary-more { color: var(--faint); }
+
+.match-breakdown {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+}
+.match-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 8px;
+    border-radius: 20px;
+    background: var(--line2);
+    font-size: 0.75rem;
+    color: var(--soft);
+}
+.match-tag-count {
+    font-weight: 600;
+    color: var(--ink);
+}
 
 .insights-txn-toggle {
     display: flex;
