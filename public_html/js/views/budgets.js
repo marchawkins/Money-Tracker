@@ -44,11 +44,12 @@ const BudgetsView = (() => {
 
             <div class="card">
                 <div class="bgt-list" id="budget-list">
-                    ${categories.map(c => {
-                        const budget = budgetMap[c.id];
-                        const val    = budget ? budget.amount : '';
+                    ${sortCategoriesHierarchically(categories).map(c => {
+                        const budget    = budgetMap[c.id];
+                        const val       = budget ? budget.amount : '';
+                        const nameLabel = (c._isChild ? '  — ' : '') + escHtml(c.name);
                         return `<div class="bgt-row" data-id="${c.id}" data-budget-id="${budget ? budget.id : ''}">
-                            <span class="bgt-cat-name">${escHtml(c.name)}</span>
+                            <span class="bgt-cat-name">${nameLabel}</span>
                             <div class="bgt-input-wrap">
                                 <span class="bgt-currency">$</span>
                                 <input type="number" class="bgt-input" min="0" step="0.01"

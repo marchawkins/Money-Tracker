@@ -29,8 +29,7 @@ const TransactionsView = (() => {
             history.replaceState(null, '', newHash);
         }
 
-        const catOpts  = `<option value="">All categories</option>` +
-            categories.map(c => `<option value="${c.id}">${escHtml(c.name)}</option>`).join('');
+        const catOpts  = buildCategoryOptions(categories, { placeholder: 'All categories' });
         const acctOpts = `<option value="">All accounts</option>` +
             accounts.map(a => `<option value="${a.id}">${escHtml(a.name)}</option>`).join('');
 

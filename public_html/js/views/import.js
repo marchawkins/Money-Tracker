@@ -140,8 +140,7 @@ const ImportView = (() => {
         }));
 
         // Build category options string once (no selected attr — set via .value after insert)
-        const catOptsHTML = '<option value="">Uncategorized</option>'
-            + categories.map(c => `<option value="${c.id}">${escHtml(c.name)}</option>`).join('');
+        const catOptsHTML = buildCategoryOptions(categories, { placeholder: 'Uncategorized' });
 
         const formatLabel = { apple_card: 'Apple Card', chase: 'Chase', pnc: 'PNC' }[previewData.format] || previewData.format;
 

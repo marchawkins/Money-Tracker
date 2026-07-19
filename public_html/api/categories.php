@@ -23,12 +23,12 @@ switch ($method) {
 
 function handleList(PDO $db): void {
     $stmt = $db->prepare(
-        'SELECT c.id, c.name,
+        'SELECT c.id, c.name, c.parent_id,
                 COUNT(t.id) AS transaction_count
          FROM categories c
          LEFT JOIN transactions t ON t.category_id = c.id AND t.deleted_at IS NULL
          WHERE c.user_id = ? AND c.deleted_at IS NULL
-         GROUP BY c.id, c.name
+         GROUP BY c.id, c.name, c.parent_id
          ORDER BY c.name ASC'
     );
     $stmt->execute([CURRENT_USER_ID]);
@@ -37,6 +37,7 @@ function handleList(PDO $db): void {
         'categories' => array_map(fn($r) => [
             'id'                => (int)$r['id'],
             'name'              => $r['name'],
+            'parent_id'         => $r['parent_id'] !== null ? (int)$r['parent_id'] : null,
             'transaction_count' => (int)$r['transaction_count'],
         ], $rows),
     ]);

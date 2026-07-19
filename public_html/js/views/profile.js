@@ -415,9 +415,7 @@ const ProfileView = (() => {
     }
 
     function buildMerchantRow(m, cats) {
-        const selectedOptions = cats.map(c =>
-            `<option value="${c.id}"${c.id === m.category_id ? ' selected' : ''}>${escHtml(c.name)}</option>`
-        ).join('');
+        const selectedOptions = buildCategoryOptions(cats, { selected: m.category_id });
         return `<tr data-id="${m.id}">
             <td class="prf-merchant-name">${escHtml(m.merchant)}</td>
             <td>

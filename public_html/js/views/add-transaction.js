@@ -41,10 +41,10 @@ const AddTransactionView = (() => {
         const currentType = existing?.type || 'expense';
         const isEdit = !!editId;
 
-        const catOptions = `<option value="">— Select category —</option>` +
-            categories.map(c =>
-                `<option value="${c.id}"${existing?.category_id === c.id ? ' selected' : ''}>${escHtml(c.name)}</option>`
-            ).join('');
+        const catOptions = buildCategoryOptions(categories, {
+            placeholder: '— Select category —',
+            selected:    existing?.category_id ?? null,
+        });
 
         const acctOptions = `<option value="">— No account —</option>` +
             accounts.map(a =>

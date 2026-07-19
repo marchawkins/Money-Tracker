@@ -26,6 +26,54 @@ function formatDate(dateStr) {
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
+// Returns categories in a flat array sorted hierarchically: top-level categories
+// (parent_id === null) in alpha order, each followed immediately by their children
+// in alpha order. Each item gets a _isChild boolean property.
+function sortCategoriesHierarchically(categories) {
+    const parents  = categories.filter(c => !c.parent_id)
+                               .sort((a, b) => a.name.localeCompare(b.name));
+    const byParent = {};
+    categories.filter(c => c.parent_id).forEach(c => {
+        if (!byParent[c.parent_id]) byParent[c.parent_id] = [];
+        byParent[c.parent_id].push(c);
+    });
+    Object.values(byParent).forEach(arr => arr.sort((a, b) => a.name.localeCompare(b.name)));
+
+    const result = [];
+    for (const p of parents) {
+        result.push(Object.assign({}, p, { _isChild: false }));
+        (byParent[p.id] || []).forEach(c =>
+            result.push(Object.assign({}, c, { _isChild: true }))
+        );
+    }
+    // Orphans (parent not in list) — append alphabetically
+    const parentIds = new Set(parents.map(p => p.id));
+    categories
+        .filter(c => c.parent_id && !parentIds.has(c.parent_id))
+        .sort((a, b) => a.name.localeCompare(b.name))
+        .forEach(c => result.push(Object.assign({}, c, { _isChild: false })));
+
+    return result;
+}
+
+// Builds an HTML string of <option> elements from a categories array,
+// sorted hierarchically (parents first, then children indented under them).
+// opts.placeholder — text for the leading empty <option>; omit to skip
+// opts.selected    — category id to mark as selected (null/undefined for none)
+function buildCategoryOptions(categories, { placeholder, selected } = {}) {
+    const sorted = sortCategoriesHierarchically(categories);
+    const parts  = [];
+    if (placeholder != null) {
+        parts.push(`<option value="">${escHtml(placeholder)}</option>`);
+    }
+    for (const c of sorted) {
+        const sel   = (selected != null && c.id === selected) ? ' selected' : '';
+        const label = c._isChild ? `  — ${escHtml(c.name)}` : escHtml(c.name);
+        parts.push(`<option value="${c.id}"${sel}>${label}</option>`);
+    }
+    return parts.join('');
+}
+
 // Attaches "＋ New category…" behaviour to a <select> element.
 // When the user picks that option, a small modal appears to name the category.
 // On save, the new category is created via the API, added to the select,

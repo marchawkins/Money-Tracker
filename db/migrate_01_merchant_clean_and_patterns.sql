@@ -5,8 +5,8 @@
 --
 -- [ALREADY EXISTS — DO NOT RE-RUN]
 --   categories.parent_id     Added manually before this migration.
---                            Has an index (idx_parent_id) but NO FK constraint —
---                            MariaDB on this host rejected the FK syntax.
+--                            Has index (idx_categories_parent) AND FK constraint
+--                            (fk_categories_parent) — both applied successfully.
 --
 -- [ALREADY EXISTS — DO NOT RE-RUN]
 --   transactions.merchant_clean  Added and backfilled (~1,118 rows) using a

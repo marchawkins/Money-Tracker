@@ -38,11 +38,9 @@ CREATE TABLE categories (
     name       VARCHAR(100) NOT NULL,
     deleted_at TIMESTAMP NULL DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
-    -- NOTE: parent_id has an index on the live DB but no FK constraint.
-    -- MariaDB on this host rejected the FK syntax; only the index stuck.
-    -- Application code must not assume referential integrity is enforced.
-    INDEX idx_parent_id (parent_id)
+    FOREIGN KEY (user_id)   REFERENCES users(id)      ON DELETE CASCADE,
+    FOREIGN KEY (parent_id) REFERENCES categories(id),
+    INDEX idx_categories_parent (parent_id)
 );
 
 CREATE TABLE transactions (
